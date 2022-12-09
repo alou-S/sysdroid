@@ -4,6 +4,9 @@ A python script to show Android Device Temps and Clocks
 This python script is more of a personal project. 
 
 It was designed to work with my Samsung M01.
-Should theoretically work with most Qualcomm devices of with similar sysfs structure with tweaking the thermal zones.
+Should theoretically work with most Qualcomm devices of with similar sysfs structure with minor modifications.
 
-Tested on a Lenovo Tab 4 10 and works fine.
+Tested Devices : 
+- Samsung M01
+- Lenovo Tab 4 10
+- Redmi Note 11
