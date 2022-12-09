@@ -58,34 +58,23 @@ if True: #Loads Config File
 	interval = int(config["Update Interval"])
 	splash = int(config["Splash Screen"])
 
-	if os.path.isfile("/sys/class/thermal/{}/temp".format(cpu_probe)) == False:#Checks whether loaded probe files exist.
-		if os.path.isfile("/sys/class/thermal/{}/temp".\
-			format(gpu_probe)) == False:
+	 #Checks whether loaded probe files exist.
 
-			print( Fore.RED + "Thermal Probe for CPU not found",\
-			 	Fore.GREEN + "	(/sys/class/thermal/{}/temp)".\
-			 	format(cpu_probe))
-			print( Fore.RED + "Thermal Probe for CPU not found",\
-			 	Fore.GREEN + "	(/sys/class/thermal/{}/temp)".\
-				format(gpu_probe))
-			print(Fore.RED + "Check the sysdroid.cfg file.",\
-			 	Style.RESET_ALL + "Program Exiting.")
-			exit()
-		else:
-			print( Fore.RED + "Thermal Probe for CPU not found",\
-			 	Fore.GREEN + "	(/sys/class/thermal/{}/temp)"\
-					.format(cpu_probe))
-			print(Fore.RED + "Check the sysdroid.cfg file.",\
-				 Style.RESET_ALL + "Program Exiting.")
-			exit()
-
-	if os.path.isfile("/sys/class/thermal/{}/temp".format(gpu_probe)) == False:
+	if os.path.isfile(f"/sys/class/thermal/{cpu_probe}/temp") == False:
 		print( Fore.RED + "Thermal Probe for CPU not found",\
-		 	Fore.GREEN + "	(/sys/class/thermal/{}/temp)".\
-				format(gpu_probe))
+			Fore.GREEN + f"	(/sys/class/thermal/{cpu_probe}/temp)")
+		print(Fore.RED + "Check the sysdroid.cfg file.",\
+		 	Style.RESET_ALL + "Program Exiting.")
+		exit(1)
+	
+	if os.path.isfile(f"/sys/class/thermal/{gpu_probe}/temp") == False:
+		print( Fore.RED + "Thermal Probe for CPU not found",\
+		 	Fore.GREEN + f"	(/sys/class/thermal/{gpu_probe}/temp)")
 		print(Fore.RED + "Check the sysdroid.cfg file.",\
 		 	Style.RESET_ALL + "Program Exiting.")
 		exit()
+	
+
 
 
 #Initializing all required Variables
@@ -114,7 +103,7 @@ if splash == 1:
 
 
 #Opening required files
-pcpu_t = open("/sys/class/thermal/{}/temp".format(cpu_probe), "r")
+pcpu_t = open(f"/sys/class/thermal/{cpu_probe}/temp", "r")
 
 pbat_u = open("/sys/class/power_supply/battery/capacity", "r")
 pbat_v = open("/sys/class/power_supply/battery/voltage_now", "r")
@@ -123,17 +112,15 @@ pbat_t = open("/sys/class/power_supply/battery/temp", "r")
 pbat_mA = open("/sys/class/power_supply/battery/current_now", "r")
 
 pgpu_u = open("/sys/kernel/gpu/gpu_busy", "r")
-pgpu_t = open("/sys/class/thermal/{}/temp".format(gpu_probe), "r")
+pgpu_t = open(f"/sys/class/thermal/{gpu_probe}/temp", "r")
 pgpu_c = open("/sys/kernel/gpu/gpu_clock", "r")
 
 cc = len(psutil.cpu_percent(percpu=True)) #This gets the number of CPU Cores
 
 temp = 0
 while temp != cc: #Simple Loop to detect all CPU cores in sysfs
-	globals()["pcpu_c{}".format(temp)] = \
-		open("/sys/devices/system/cpu/cpu{}/cpufreq/cpuinfo_cur_freq".\
-			format(temp), "r")
-
+	globals()[f"pcpu_c{temp}"] = \
+		open(f"/sys/devices/system/cpu/cpu{temp}/cpufreq/cpuinfo_cur_freq", "r")
 	temp += 1
 
 if getcgpuname == 1:
@@ -150,8 +137,7 @@ if getcgpuname == 1:
 			replace("  ", " ").split("OpenGL", 1)[0]
 
 def KBInterruptHandler(signal, frame): #Function that is called on Interrupt Signal
-	print("KeyboardInterrupt (ID: {}) has been caught. Closing...".\
-		format(signal))
+	print(f"KeyboardInterrupt (ID: {signal}) has been caught. Closing...")
 	exit(0)
 
 def mkpstring(rawval): #Function that generates the Percentage Progress Bar.
@@ -181,7 +167,7 @@ def printcgpu():
 		tempcolor = Fore.RED
 
 	superchar += Fore.GREEN + cpu_name
-	superchar += Fore.CYAN + " {}% ".format(psutil.cpu_percent())
+	superchar += Fore.CYAN + f" {psutil.cpu_percent()}% "
 	superchar += tempcolor + str(cpu_t) + "°C \n"
 	temp = 0
 
@@ -189,7 +175,7 @@ def printcgpu():
 		superchar += Fore.GREEN + "CPU"
 		superchar += str(temp + 1)
 		superchar += Fore.YELLOW + " @ "
-		superchar += Fore.CYAN + str(globals()["cpu_c{}".format(temp)]) + "MHz	"
+		superchar += Fore.CYAN + str(globals()[f"cpu_c{temp}"]) + "MHz	"
 		superchar += mkpstring(usage[temp]) + "\n"
 		temp += 1
 
@@ -234,8 +220,8 @@ def printbat():
 		superchar += str(int(w2 * bat_v / 1000000)) + " mW" + \
 			str(int(w10 * bat_v / 1000000)) + plusplus + " mW"
 
-		superchar += (bat_mAH / 1000 + " mAH")
-		superchar += (tempcolor + str(bat_t) / 10 + "°C")
+		superchar += str(bat_mAH / 1000) + " mAH"
+		superchar += tempcolor + str(bat_t) + "°C"
 	else :
 		superchar += Fore.CYAN + str(int(bat_mA / 1000)) + plusplus + " mA \n"
 		superchar += str(int(bat_mA * bat_v / 1000000000)) + plusplus + " mW \n"
@@ -257,8 +243,8 @@ def reloadall(): #Syncs all file pointer values to variables each cycle
 
 	temp = 0
 	while temp != cc: #Simple loop to update all CPU frequency values
-		globals()["cpu_c{}".format(temp)] =  int( int(globals()["pcpu_c{}".\
-			format(temp)].read()) / 1000 )
+		globals()[f"cpu_c{temp}"] =  int( int(globals()[f"pcpu_c{temp}"]\
+			.read()) / 1000 )
 		temp += 1
 	cpu_t = int(pcpu_t.read()) / 1000
 	usage = psutil.cpu_percent(percpu=True) #Updates CPU usage value
@@ -283,7 +269,7 @@ def reloadall(): #Syncs all file pointer values to variables each cycle
 
 	temp = 0
 	while temp != cc:
-	    globals()["pcpu_c{}".format(temp)].seek(0)
+	    globals()[f"pcpu_c{temp}"].seek(0)
 	    temp += 1
 
 
@@ -334,3 +320,4 @@ while True:
 
 	signal.signal(signal.SIGINT, KBInterruptHandler)
 	time.sleep(sleepintv)
+
