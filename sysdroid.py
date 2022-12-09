@@ -30,8 +30,7 @@ if config == False: #Creates config file if missing
 	config.write ("Automatically get CPU and GPU name = 1\n\n")
 
 	config.write ("CPU Temperature Probe = thermal_zone9\n")
-	config.write ("GPU Temperature Probe = thermal_zone12\n")
-	config.write ("Use Kernel battery Current Info = 1\n\n")
+	config.write ("GPU Temperature Probe = thermal_zone12\n\n")
 
 	config.write ("Progress Bar Length = 40\n")
 	config.write ("Update Interval = 2\n")
@@ -52,7 +51,6 @@ if True: #Loads Config File
 
 	cpu_probe = str(config["CPU Temperature Probe"])
 	gpu_probe = str(config["GPU Temperature Probe"])
-	kernelbat_mA = int(config["Use Kernel battery Current Info"])
 
 	pslength = int(config["Progress Bar Length"])
 	interval = int(config["Update Interval"])
@@ -80,15 +78,7 @@ if True: #Loads Config File
 #Initializing all required Variables
 t_update = 0
 y = 0
-w2s = 0
-w10s = 0
-w10 = 0
 sleepintv = interval / 10
-
-if kernelbat_mA == 0: #In the case user wants manual Battery Current calculation.
-	w2s = 0
-	w10s = 0
-	w10 = 0
 
 if splash == 1:
 	print(Fore.GREEN + "sysdroid", Fore.CYAN + " - alou S", Fore.YELLOW + "	(https://github.com/alou-S) \n" + Fore.WHITE)
@@ -110,10 +100,20 @@ pbat_v = open("/sys/class/power_supply/battery/voltage_now", "r")
 pbat_mAH = open("/sys/class/power_supply/battery/charge_counter", "r")
 pbat_t = open("/sys/class/power_supply/battery/temp", "r")
 pbat_mA = open("/sys/class/power_supply/battery/current_now", "r")
+pbat_s = open("/sys/class/power_supply/battery/status", "r")
 
 pgpu_u = open("/sys/kernel/gpu/gpu_busy", "r")
 pgpu_t = open(f"/sys/class/thermal/{gpu_probe}/temp", "r")
 pgpu_c = open("/sys/kernel/gpu/gpu_clock", "r")
+
+try:
+	psc_v = open("/sys/class/power_supply/sc8551-standalone/sc_bus_voltage", "r")
+	psc_t = open("/sys/class/power_supply/sc8551-standalone/sc_die_temperature", "r")
+	psc_mA = open("/sys/class/power_supply/sc8551-standalone/sc_bus_current", "r")
+	fastcharge = 1
+except:
+	fastcharge = 0
+
 
 cc = len(psutil.cpu_percent(percpu=True)) #This gets the number of CPU Cores
 
@@ -134,7 +134,7 @@ if getcgpuname == 1:
 
 	gpu_name = str(subprocess.check_output("dumpsys SurfaceFlinger | grep GLES",\
 		shell=True).decode("utf-8")).replace("GLES: ", "").replace(",", "").\
-			replace("  ", " ").split("OpenGL", 1)[0]
+			replace("  ", " ").replace("(TM)", "").split("OpenGL", 1)[0]
 
 def KBInterruptHandler(signal, frame): #Function that is called on Interrupt Signal
 	print(f"KeyboardInterrupt (ID: {signal}) has been caught. Closing...")
@@ -204,7 +204,7 @@ def printbat():
 	global superchar
 
 	superchar += Fore.GREEN + "Battery	" + mkpstring(bat_u) + "\n"
-	superchar += Fore.CYAN + str(bat_v / 1000) + "mV \n"
+	superchar += Fore.CYAN + str(int(bat_v / 1000)) + " mV \n"
 
 	if(bat_t < 27):
 		tempcolor = Fore.CYAN
@@ -215,18 +215,28 @@ def printbat():
 	elif(bat_t > 44):
 		tempcolor = Fore.RED
 
-	if kernelbat_mA == 0:
-		superchar += str(w2) + " mA" + str(w10) + plusplus + " mA"
-		superchar += str(int(w2 * bat_v / 1000000)) + " mW" + \
-			str(int(w10 * bat_v / 1000000)) + plusplus + " mW"
 
-		superchar += str(bat_mAH / 1000) + " mAH"
-		superchar += tempcolor + str(bat_t) + "°C"
-	else :
-		superchar += Fore.CYAN + str(int(bat_mA / 1000)) + plusplus + " mA \n"
-		superchar += str(int(bat_mA * bat_v / 1000000000)) + plusplus + " mW \n"
-		superchar += str(bat_mAH / 1000) + " mAH \n"
-		superchar += tempcolor + str(bat_t) + "°C \n"
+	superchar += Fore.CYAN + str(int(bat_mA / 1000)) + plusplus + " mA \n"
+	superchar += str(int(bat_mA * bat_v / 1000000000)) + plusplus + " mW \n"
+	superchar += str(bat_mAH) + " mAH \n"
+	superchar += tempcolor + str(bat_t) + "°C \n\n"
+
+	if fastcharge == 1 and "++" in plusplus:
+		superchar += Fore.GREEN + "Fast Charge\n"
+		superchar += Fore.CYAN + str(sc_v) + " mV \n"
+		superchar += Fore.CYAN + str(sc_mA) + " mA \n"
+		superchar += Fore.CYAN + str(int(sc_v * sc_mA / 1000)) + " mW \n"
+		
+		if(sc_t < 32):
+			tempcolor = Fore.CYAN
+		elif(sc_t < 40):
+			tempcolor = Fore.GREEN
+		elif(sc_t < 51):
+			tempcolor = Fore.YELLOW
+		elif(sc_t > 50):
+			tempcolor = Fore.RED
+
+		superchar += tempcolor + str(sc_t) + "°C \n"
 
 def reloadall(): #Syncs all file pointer values to variables each cycle
 	global cpu_t
@@ -235,6 +245,9 @@ def reloadall(): #Syncs all file pointer values to variables each cycle
 	global bat_mAH
 	global bat_t
 	global bat_mA
+	global sc_mA
+	global sc_t
+	global sc_v
 	global gpu_u
 	global gpu_t
 	global gpu_c
@@ -250,17 +263,20 @@ def reloadall(): #Syncs all file pointer values to variables each cycle
 	usage = psutil.cpu_percent(percpu=True) #Updates CPU usage value
 
 	#Battery Values Update
-	if int(pbat_mA.read()) > 0: #This checks whether battery is charging and changes plusplus value
+	if pbat_s.read() == "Charging\n": #This checks whether battery is charging and changes plusplus value
 		plusplus = Fore.YELLOW + "++" + Fore.CYAN
 	else:
 		plusplus = ""
-	pbat_mA.seek(0)
 
 	bat_u = int(pbat_u.read())
 	bat_v = int(pbat_v.read())
 	bat_mAH = int(pbat_mAH.read())
 	bat_t = int(pbat_t.read()) / 10
 	bat_mA = abs(int(pbat_mA.read()))
+
+	sc_mA = int(psc_mA.read())
+	sc_v = int(psc_v.read())
+	sc_t = int(psc_t.read())
 
 	#GPU Values Update
 	gpu_u = int( pgpu_u.read().replace("%", "") )
@@ -281,22 +297,15 @@ def reloadall(): #Syncs all file pointer values to variables each cycle
 	pbat_u.seek(0)
 	pbat_t.seek(0)
 	pbat_mA.seek(0)
+	pbat_s.seek(0)
+	
+	psc_mA.seek(0)
+	psc_v.seek(0)
+	psc_t.seek(0)
 
 	pgpu_t.seek(0)
 	pgpu_u.seek(0)
 	pgpu_c.seek(0)
-
-def calcbat_mA(): #This is for calculating battery Current based on Battery Charge Values
-	global w2
-	global w10
-	global w2s
-	global w10s
-	#w2 is the 2 second average and w10 is the 10 second average
-	w2 = int( (w2s - bat_mAH) * 1.8)
-	w2s = bat_mAH
-	if t_update != y and t_update % 5 == 0:
-		w10 = int((w10s - w2s) * 0.36)
-		w10s = w2s
 
 
 while True:
@@ -305,9 +314,6 @@ while True:
 		t_update = t
 
 		reloadall()
-
-		if kernelbat_mA == 0:
-			calcbat_mA()
 
 		superchar = ""
 		printcgpu()
